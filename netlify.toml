@@ -13,6 +13,35 @@
     Content-Type = "text/css; charset=utf-8"
 
 [[headers]]
+  for = "/assets/*.css"
+  [headers.values]
+    Content-Type = "text/css; charset=utf-8"
+
+[[headers]]
+  for = "/assets/webfonts/*.woff2"
+  [headers.values]
+    Content-Type = "font/woff2"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/assets/webfonts/*.woff"
+  [headers.values]
+    Content-Type = "font/woff"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/assets/webfonts/*.ttf"
+  [headers.values]
+    Content-Type = "font/ttf"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
+  for = "/assets/webfonts/*.eot"
+  [headers.values]
+    Content-Type = "application/vnd.ms-fontobject"
+    Access-Control-Allow-Origin = "*"
+
+[[headers]]
   for = "/*.html"
   [headers.values]
     Content-Type = "text/html; charset=utf-8"
