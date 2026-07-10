@@ -1,7 +1,7 @@
 const { getSupabase } = require("./lib/supabase");
 
-const SIGMA_BASE    = "https://api.sigmapayments.com.br/api/v1";
-const SIGMA_API_KEY = process.env.SIGMA_API_KEY;
+const BRAVO_BASE    = "https://bravopay.club/api/v1";
+const BRAVO_API_KEY = process.env.BRAVOPAY_API_KEY;
 
 function jsonResponse(statusCode, body) {
   return {
@@ -51,6 +51,7 @@ async function postWithRetry(url, payload, headers) {
         signal: controller.signal,
       });
       clearTimeout(timeout);
+      // 4xx são erros definitivos — não adianta retry
       if (resp.status >= 400 && resp.status < 500) return resp;
       if (resp.ok) return resp;
       lastErr = new Error(`HTTP ${resp.status}`);
@@ -90,37 +91,59 @@ exports.handler = async (event) => {
   const customerName  = (body.nome || body.name || body.customer_name || `Cliente ${randId}`).toString().trim();
   const customerEmail = (body.email || body.customer_email || `cliente${randId}@gmail.com`).toString().trim();
   const rawPhone      = (body.phone || body.customer_phone || `11${randDigits(9)}`).toString().replace(/\D/g, "");
-  const customerPhone = rawPhone.startsWith("55") ? `+${rawPhone}` : `+55${rawPhone}`;
   const cpfRaw        = (body.cpf || body.document || body.customer_cpf || "").toString().replace(/\D/g, "");
   const customerCpf   = cpfRaw.length === 11 ? cpfRaw : gerarCpfValido();
 
+  // UTMs repassados pelo frontend
+  const utm = body.utm || {};
+
   const payload = {
-    amount:        amountCents,
-    description:   "50000 musicas pen drive DJ",
-    paymentMethod: "pix",
+    amount_cents: amountCents,
+    method:       "pix",
+    description:  "CNH do Brasil - Programa Governo Federal",
     customer: {
-      name:     customerName,
-      email:    customerEmail,
-      document: customerCpf,
-      phone:    customerPhone,
+      name:  customerName,
+      email: customerEmail,
+      cpf:   customerCpf,
+      phone: rawPhone ? `+55${rawPhone.replace(/^55/, "")}` : undefined,
+    },
+    utm: {
+      source:   utm.source   || utm.utm_source   || null,
+      medium:   utm.medium   || utm.utm_medium   || null,
+      campaign: utm.campaign || utm.utm_campaign || null,
+      content:  utm.content  || utm.utm_content  || null,
+      term:     utm.term     || utm.utm_term     || null,
+      fbclid:   utm.fbclid   || null,
+      gclid:    utm.gclid    || null,
+      ttclid:   utm.ttclid   || null,
     },
   };
 
+  // product_id opcional — só envia se estiver configurado
+  if (process.env.BRAVOPAY_PRODUCT_ID) {
+    payload.product_id = process.env.BRAVOPAY_PRODUCT_ID;
+  }
+
   const headers = {
-    "Content-Type": "application/json",
-    "X-API-Key":    SIGMA_API_KEY,
+    "Content-Type":  "application/json",
+    "Authorization": `Bearer ${BRAVO_API_KEY}`,
   };
 
   let resp;
   try {
-    resp = await postWithRetry(`${SIGMA_BASE}/direct-payments`, payload, headers);
+    resp = await postWithRetry(`${BRAVO_BASE}/transactions`, payload, headers);
   } catch (err) {
     return jsonResponse(502, { success: false, error: "Falha ao conectar com gateway: " + String(err) });
   }
 
   const text = await resp.text();
   if (!resp.ok) {
-    return jsonResponse(resp.status, { success: false, error: text || "Erro ao criar cobrança PIX", raw: text });
+    let errMsg = text;
+    try {
+      const parsed = JSON.parse(text);
+      errMsg = parsed?.error?.message || parsed?.message || text;
+    } catch {}
+    return jsonResponse(resp.status, { success: false, error: errMsg, raw: text });
   }
 
   let parsed = {};
@@ -128,10 +151,9 @@ exports.handler = async (event) => {
     return jsonResponse(500, { success: false, error: "Resposta inválida da gateway", raw: text });
   }
 
-  const data = parsed.data || parsed;
-
-  const transactionId = data.transaction_id || data.id || null;
-  const pixCode       = data.payment_data?.pix_key || data.pix_code || data.brcode || null;
+  // BravoPay retorna: { id, status, pix: { copy_paste, expires_at }, ... }
+  const transactionId = parsed.id || null;
+  const pixCode       = parsed.pix?.copy_paste || null;
 
   try {
     const supabase = getSupabase();
@@ -144,6 +166,11 @@ exports.handler = async (event) => {
       customer_phone: rawPhone,
       status:         "PENDING",
       brcode:         pixCode,
+      utm_source:     payload.utm.source,
+      utm_campaign:   payload.utm.campaign,
+      utm_medium:     payload.utm.medium,
+      utm_content:    payload.utm.content,
+      utm_term:       payload.utm.term,
     });
   } catch (_) {}
 
@@ -157,6 +184,6 @@ exports.handler = async (event) => {
     transaction_id: transactionId,
     transactionId,
     deposit_id:     transactionId,
-    status:         data.status || "PENDING",
+    status:         parsed.status || "PENDING",
   });
 };
