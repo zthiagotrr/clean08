@@ -165,12 +165,9 @@ src="https://www.facebook.com/tr?id=4327697327497010&ev=PageView&noscript=1"
     <link rel="stylesheet" href="/assets/fa5-all.min.css">
     <!-- FA icon fallback: substitui fas fa-* por SVG inline caso a webfont não carregue -->
     <style>
-      .fa-ellipsis-v-svg::before,
-      .fa-cookie-bite-svg::before,
-      .fa-th-svg::before,
-      .fa-bars-svg::before,
-      .fa-search-svg::before,
-      .fa-user-svg::before { content: none !important; }
+      /* Esconde completamente qualquer <i> com classe fas/far/fab que não foi substituído */
+      i.fas, i.far, i.fab { display: none !important; }
+      span.fas, span.far, span.fab { display: inline-block !important; }
     </style>
     <script>
     (function() {
@@ -183,35 +180,31 @@ src="https://www.facebook.com/tr?id=4327697327497010&ev=PageView&noscript=1"
         'fa-user':         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" style="width:0.875em;height:1em;fill:currentColor;display:inline-block;vertical-align:-0.125em"><path d="M224 256c70.7 0 128-57.3 128-128S294.7 0 224 0 96 57.3 96 128s57.3 128 128 128zm89.6 32h-16.7c-22.2 10.2-46.9 16-72.9 16s-50.6-5.8-72.9-16h-16.7C60.2 288 0 348.2 0 422.4V464c0 26.5 21.5 48 48 48h352c26.5 0 48-21.5 48-48v-41.6c0-74.2-60.2-134.4-134.4-134.4z"/></svg>'
       };
       function replaceIcons() {
-        var icons = document.querySelectorAll('i.fas, i.far, i.fab');
+        var icons = document.querySelectorAll('i.fas:not([data-svg-done]), i.far:not([data-svg-done]), i.fab:not([data-svg-done])');
         icons.forEach(function(el) {
           var cls = Array.from(el.classList).find(function(c) { return ICONS[c]; });
-          if (!cls) return;
-          var svg = document.createElement('span');
-          svg.innerHTML = ICONS[cls];
-          svg.style.cssText = el.style.cssText;
-          svg.className = el.className;
-          svg.setAttribute('aria-hidden', 'true');
-          el.parentNode.replaceChild(svg, el);
+          if (!cls) { el.setAttribute('data-svg-done','1'); return; }
+          var span = document.createElement('span');
+          span.innerHTML = ICONS[cls];
+          span.className = el.className;
+          span.style.cssText = el.style.cssText;
+          span.setAttribute('aria-hidden', 'true');
+          span.setAttribute('data-svg-done', '1');
+          el.parentNode.replaceChild(span, el);
         });
+      }
+      var obs = new MutationObserver(function() { replaceIcons(); });
+      function start() {
+        replaceIcons();
+        obs.observe(document.body, { childList: true, subtree: true });
+        // garante que pega ícones renderizados pelo React em cada troca de rota
+        setInterval(replaceIcons, 300);
       }
       if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', function() {
-          setTimeout(replaceIcons, 100);
-          setTimeout(replaceIcons, 500);
-          setTimeout(replaceIcons, 1500);
-        });
+        document.addEventListener('DOMContentLoaded', start);
       } else {
-        setTimeout(replaceIcons, 100);
-        setTimeout(replaceIcons, 500);
-        setTimeout(replaceIcons, 1500);
+        start();
       }
-      // Observa mudanças no DOM (React renderiza depois)
-      var obs = new MutationObserver(function() { replaceIcons(); });
-      document.addEventListener('DOMContentLoaded', function() {
-        obs.observe(document.body, { childList: true, subtree: true });
-        setTimeout(function() { obs.disconnect(); }, 5000);
-      });
     })();
     </script>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&amp;display=swap">
