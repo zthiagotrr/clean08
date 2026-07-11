@@ -1,8 +1,7 @@
 const { getSupabase } = require("./lib/supabase");
 
-const POSEIDON_BASE   = "https://app.poseidonpay.site/api/v1";
-const POSEIDON_PUB    = process.env.POSEIDON_PUBLIC_KEY;
-const POSEIDON_SEC    = process.env.POSEIDON_SECRET_KEY;
+const MASTERFY_BASE = "https://api.masterfypagamentos.com/v1";
+const MASTERFY_KEY  = process.env.MASTERFY_API_KEY;
 
 function jsonResponse(statusCode, body) {
   return {
@@ -17,12 +16,13 @@ function jsonResponse(statusCode, body) {
   };
 }
 
-function normalizeAmount(rawAmount) {
-  if (rawAmount == null) return 81.70;
+function normalizeAmountCents(rawAmount) {
+  if (rawAmount == null) return 8170;
   const n = Number(rawAmount);
-  if (!Number.isFinite(n)) return 81.70;
-  if (Number.isInteger(n) && n >= 100) return n / 100;
-  return n;
+  if (!Number.isFinite(n)) return 8170;
+  if (!Number.isInteger(n)) return Math.round(n * 100);
+  if (n < 100) return Math.round(n * 100);
+  return Math.round(n);
 }
 
 function gerarCpfValido() {
@@ -35,16 +35,6 @@ function gerarCpfValido() {
   let r2 = (s2 * 10) % 11; if (r2 >= 10) r2 = 0;
   d.push(r2);
   return d.join('');
-}
-
-function formatCpf(cpf) {
-  return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-}
-
-function getDueDate() {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return d.toISOString().split("T")[0];
 }
 
 async function postWithRetry(url, payload, headers) {
@@ -94,44 +84,43 @@ exports.handler = async (event) => {
   const randDigits = (len) => Array.from({ length: len }, () => Math.floor(Math.random() * 10)).join("");
   const randId = randDigits(8);
 
-  const rawAmount = body.amount ?? body.valor ?? body.total ?? 8170;
-  const amount    = normalizeAmount(rawAmount);
+  const rawAmount   = body.amount ?? body.valor ?? body.total ?? 8170;
+  const amountCents = normalizeAmountCents(rawAmount);
 
   const customerName  = (body.nome || body.name || body.customer_name || `Cliente ${randId}`).toString().trim();
   const customerEmail = (body.email || body.customer_email || `cliente${randId}@gmail.com`).toString().trim();
-  const customerPhone = (body.phone || body.customer_phone || "(11) 99999-9999").toString();
+  const customerPhone = (body.phone || body.customer_phone || "11999999999").toString().replace(/\D/g, "");
   const cpfRaw        = (body.cpf || body.document || body.customer_cpf || "").toString().replace(/\D/g, "");
   const customerCpf   = cpfRaw.length === 11 ? cpfRaw : gerarCpfValido();
 
   const payload = {
-    identifier: `order_${randId}_${Date.now()}`,
-    amount,
-    client: {
-      name:     customerName,
-      email:    customerEmail,
-      phone:    customerPhone,
-      document: formatCpf(customerCpf),
+    amount:      amountCents,
+    currency:    "BRL",
+    method:      "PIX",
+    description: "Livro Falante",
+    externalRef: `order_${randId}_${Date.now()}`,
+    payer: {
+      name:  customerName,
+      taxId: customerCpf,
+      email: customerEmail,
+      phone: customerPhone,
     },
-    products: [
-      {
-        id:       process.env.POSEIDON_PRODUCT_ID || "livro-falante-001",
-        name:     "Livro Falante",
-        quantity: 1,
-        price:    amount,
-      }
-    ],
-    dueDate: getDueDate(),
+    items: [{
+      quantity: 1,
+      name:     "Livro Falante",
+      price:    amountCents,
+      type:     "DIGITAL",
+    }],
   };
 
   const headers = {
     "Content-Type":  "application/json",
-    "x-public-key":  POSEIDON_PUB,
-    "x-secret-key":  POSEIDON_SEC,
+    "Authorization": `Bearer ${MASTERFY_KEY}`,
   };
 
   let resp;
   try {
-    resp = await postWithRetry(`${POSEIDON_BASE}/gateway/pix/receive`, payload, headers);
+    resp = await postWithRetry(`${MASTERFY_BASE}/payment`, payload, headers);
   } catch (err) {
     return jsonResponse(502, { success: false, error: "Falha ao conectar com gateway: " + String(err) });
   }
@@ -148,18 +137,19 @@ exports.handler = async (event) => {
     return jsonResponse(500, { success: false, error: "Resposta inválida da gateway", raw: text });
   }
 
-  // PoseidonPay retorna: transactionId, status, pix.code, pix.base64
-  const transactionId = parsed.transactionId || null;
-  const pixCode       = parsed.pix?.code || null;
+  // Masterfy retorna: id, status, data.copypaste
+  const transactionId = parsed.id || null;
+  const pixCode       = parsed.data?.copypaste || null;
 
   try {
     const supabase = getSupabase();
     await supabase.from("transactions").insert({
       transaction_id: transactionId,
-      amount,
+      amount:         amountCents / 100,
       customer_name:  customerName,
       customer_email: customerEmail,
       customer_cpf:   customerCpf,
+      customer_phone: customerPhone,
       status:         "PENDING",
       brcode:         pixCode,
     });

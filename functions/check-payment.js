@@ -1,8 +1,7 @@
 const { getSupabase } = require("./lib/supabase");
 
-const POSEIDON_BASE = "https://app.poseidonpay.site/api/v1";
-const POSEIDON_PUB  = process.env.POSEIDON_PUBLIC_KEY;
-const POSEIDON_SEC  = process.env.POSEIDON_SECRET_KEY;
+const MASTERFY_BASE = "https://api.masterfypagamentos.com/v1";
+const MASTERFY_KEY  = process.env.MASTERFY_API_KEY;
 
 const UTMIFY_TOKEN = "EAAakRBooZBQABRp8xaEz9T5H3YBvyq1JumM6Ie1LgCUQHERsBOBuo4ZA7WiVfnQ1hdmmpnM14JnsZC7tuAyHxCcEjwKnuGGiOlpL5PtZAovEWD72zPEtFhP49wewKXuhoXeQx5RKczdHZAyKr8Va7jrpk3MNMgT9XDT3hGv5KlnYq3ML2I57tyMrbOvtWugZDZD";
 
@@ -12,7 +11,7 @@ async function sendUtmifyOrder(txData, transactionId, paidAt) {
     const gatewayFeeCents = Math.round(amountCents * 0.015);
     const netCents        = amountCents - gatewayFeeCents;
     const payload = {
-      orderId: transactionId, platform: "PoseidonPay", paymentMethod: "pix", status: "paid",
+      orderId: transactionId, platform: "Masterfy", paymentMethod: "pix", status: "paid",
       createdAt: txData.created_at || new Date().toISOString().replace("T"," ").slice(0,19),
       approvedDate: paidAt || new Date().toISOString().replace("T"," ").slice(0,19),
       refundedAt: null,
@@ -59,10 +58,10 @@ exports.handler = async (event) => {
 
   let statusResp, text = "";
   try {
-    // PoseidonPay: GET /gateway/transactions/{id}
-    statusResp = await fetch(`${POSEIDON_BASE}/gateway/transactions/${encodeURIComponent(transactionId)}`, {
+    // Masterfy: GET /payment/{id}
+    statusResp = await fetch(`${MASTERFY_BASE}/payment/${encodeURIComponent(transactionId)}`, {
       method: "GET",
-      headers: { "x-public-key": POSEIDON_PUB, "x-secret-key": POSEIDON_SEC, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${MASTERFY_KEY}`, "Content-Type": "application/json" },
       signal: controller.signal,
     });
     text = await statusResp.text();
@@ -78,11 +77,11 @@ exports.handler = async (event) => {
     return jsonResponse(statusResp.status, { success: false, error: parsed?.message || text || "Erro ao consultar pagamento" });
   }
 
-  // PoseidonPay status: PENDING | OK | FAILED | REJECTED | CANCELED
+  // Masterfy status: PENDING | PAID | EXPIRED | REFUNDED | CANCELLED
   const rawStatus = (parsed.status || "PENDING").toUpperCase();
-  const paid      = rawStatus === "OK";
+  const paid      = rawStatus === "PAID";
   const status    = paid ? "paid" : rawStatus.toLowerCase();
-  const paidAt    = parsed.paidAt || parsed.updatedAt || null;
+  const paidAt    = parsed.paidAt || null;
 
   try {
     const supabase = getSupabase();
