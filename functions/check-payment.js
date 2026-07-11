@@ -112,8 +112,13 @@ exports.handler = async (event) => {
     statusResp = await fetch(`${PLAY_BASE}/pix/status/${encodeURIComponent(transactionId)}`, {
       method:  "GET",
       headers: {
-        "Authorization": `Bearer ${PLAY_API_KEY}`,
-        "Content-Type":  "application/json",
+        "Authorization":  `Bearer ${PLAY_API_KEY}`,
+        "Content-Type":   "application/json",
+        "User-Agent":     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+        "Accept":         "application/json, text/plain, */*",
+        "Accept-Language":"pt-BR,pt;q=0.9",
+        "Origin":         "https://app.playpayments.com.br",
+        "Referer":        "https://app.playpayments.com.br/",
       },
       signal: controller.signal,
     });
