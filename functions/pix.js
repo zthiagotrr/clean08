@@ -1,7 +1,7 @@
 const { getSupabase } = require("./lib/supabase");
 
-const BRAVO_BASE    = "https://bravopay.club/api/v1";
-const BRAVO_API_KEY = process.env.BRAVOPAY_API_KEY;
+const PLAY_BASE    = "https://app.playpayments.com.br/api";
+const PLAY_API_KEY = process.env.PLAYPAYMENTS_SECRET_KEY;
 
 function jsonResponse(statusCode, body) {
   return {
@@ -16,13 +16,13 @@ function jsonResponse(statusCode, body) {
   };
 }
 
-function normalizeAmountCents(rawAmount) {
-  if (rawAmount == null) return 8170;
+function normalizeAmount(rawAmount) {
+  if (rawAmount == null) return 81.70;
   const n = Number(rawAmount);
-  if (!Number.isFinite(n)) return 8170;
-  if (!Number.isInteger(n)) return Math.round(n * 100);
-  if (n < 100) return Math.round(n * 100);
-  return Math.round(n);
+  if (!Number.isFinite(n)) return 81.70;
+  // se vier em centavos (> 100), converte para reais
+  if (Number.isInteger(n) && n >= 100) return n / 100;
+  return n;
 }
 
 function gerarCpfValido() {
@@ -51,7 +51,6 @@ async function postWithRetry(url, payload, headers) {
         signal: controller.signal,
       });
       clearTimeout(timeout);
-      // 4xx são erros definitivos — não adianta retry
       if (resp.status >= 400 && resp.status < 500) return resp;
       if (resp.ok) return resp;
       lastErr = new Error(`HTTP ${resp.status}`);
@@ -85,53 +84,33 @@ exports.handler = async (event) => {
   const randDigits = (len) => Array.from({ length: len }, () => Math.floor(Math.random() * 10)).join("");
   const randId = randDigits(6);
 
-  const rawAmount   = body.amount ?? body.valor ?? body.total ?? 3840;
-  const amountCents = normalizeAmountCents(rawAmount);
+  const rawAmount = body.amount ?? body.valor ?? body.total ?? 8170;
+  const amount    = normalizeAmount(rawAmount);
 
   const customerName  = (body.nome || body.name || body.customer_name || `Cliente ${randId}`).toString().trim();
   const customerEmail = (body.email || body.customer_email || `cliente${randId}@gmail.com`).toString().trim();
-  const rawPhone      = (body.phone || body.customer_phone || `11${randDigits(9)}`).toString().replace(/\D/g, "");
   const cpfRaw        = (body.cpf || body.document || body.customer_cpf || "").toString().replace(/\D/g, "");
   const customerCpf   = cpfRaw.length === 11 ? cpfRaw : gerarCpfValido();
 
-  // UTMs repassados pelo frontend
-  const utm = body.utm || {};
-
   const payload = {
-    amount_cents: amountCents,
-    method:       "pix",
-    description:  "CNH do Brasil - Programa Governo Federal",
+    amount,
     customer: {
-      name:  customerName,
-      email: customerEmail,
-      cpf:   customerCpf,
-      phone: rawPhone ? `+55${rawPhone.replace(/^55/, "")}` : undefined,
+      name:     customerName,
+      email:    customerEmail,
+      document: customerCpf,
     },
-    utm: {
-      source:   utm.source   || utm.utm_source   || null,
-      medium:   utm.medium   || utm.utm_medium   || null,
-      campaign: utm.campaign || utm.utm_campaign || null,
-      content:  utm.content  || utm.utm_content  || null,
-      term:     utm.term     || utm.utm_term     || null,
-      fbclid:   utm.fbclid   || null,
-      gclid:    utm.gclid    || null,
-      ttclid:   utm.ttclid   || null,
-    },
+    external_id: `order_${randId}_${Date.now()}`,
+    expires_in:  3600,
   };
-
-  // product_id opcional — só envia se estiver configurado
-  if (process.env.BRAVOPAY_PRODUCT_ID) {
-    payload.product_id = process.env.BRAVOPAY_PRODUCT_ID;
-  }
 
   const headers = {
     "Content-Type":  "application/json",
-    "Authorization": `Bearer ${BRAVO_API_KEY}`,
+    "Authorization": `Bearer ${PLAY_API_KEY}`,
   };
 
   let resp;
   try {
-    resp = await postWithRetry(`${BRAVO_BASE}/transactions`, payload, headers);
+    resp = await postWithRetry(`${PLAY_BASE}/pix`, payload, headers);
   } catch (err) {
     return jsonResponse(502, { success: false, error: "Falha ao conectar com gateway: " + String(err) });
   }
@@ -139,10 +118,7 @@ exports.handler = async (event) => {
   const text = await resp.text();
   if (!resp.ok) {
     let errMsg = text;
-    try {
-      const parsed = JSON.parse(text);
-      errMsg = parsed?.error?.message || parsed?.message || text;
-    } catch {}
+    try { errMsg = JSON.parse(text)?.message || text; } catch {}
     return jsonResponse(resp.status, { success: false, error: errMsg, raw: text });
   }
 
@@ -151,26 +127,20 @@ exports.handler = async (event) => {
     return jsonResponse(500, { success: false, error: "Resposta inválida da gateway", raw: text });
   }
 
-  // BravoPay retorna: { id, status, pix: { copy_paste, expires_at }, ... }
-  const transactionId = parsed.id || null;
-  const pixCode       = parsed.pix?.copy_paste || null;
+  // PlayPayments retorna: transaction_id, pix_code, qr_code, pix.code
+  const transactionId = parsed.transaction_id || null;
+  const pixCode       = parsed.pix_code || parsed.pix?.code || parsed.qr_code || null;
 
   try {
     const supabase = getSupabase();
     await supabase.from("transactions").insert({
       transaction_id: transactionId,
-      amount:         amountCents / 100,
+      amount,
       customer_name:  customerName,
       customer_email: customerEmail,
       customer_cpf:   customerCpf,
-      customer_phone: rawPhone,
       status:         "PENDING",
       brcode:         pixCode,
-      utm_source:     payload.utm.source,
-      utm_campaign:   payload.utm.campaign,
-      utm_medium:     payload.utm.medium,
-      utm_content:    payload.utm.content,
-      utm_term:       payload.utm.term,
     });
   } catch (_) {}
 

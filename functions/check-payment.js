@@ -1,19 +1,19 @@
 const { getSupabase } = require("./lib/supabase");
 
-const BRAVO_BASE    = "https://bravopay.club/api/v1";
-const BRAVO_API_KEY = process.env.BRAVOPAY_API_KEY;
+const PLAY_BASE    = "https://app.playpayments.com.br/api";
+const PLAY_API_KEY = process.env.PLAYPAYMENTS_SECRET_KEY;
 
 const UTMIFY_TOKEN = "EAAakRBooZBQABRp8xaEz9T5H3YBvyq1JumM6Ie1LgCUQHERsBOBuo4ZA7WiVfnQ1hdmmpnM14JnsZC7tuAyHxCcEjwKnuGGiOlpL5PtZAovEWD72zPEtFhP49wewKXuhoXeQx5RKczdHZAyKr8Va7jrpk3MNMgT9XDT3hGv5KlnYq3ML2I57tyMrbOvtWugZDZD";
 
 async function sendUtmifyOrder(txData, transactionId, paidAt) {
   try {
     const amountCents     = Math.round((txData.amount || 43.10) * 100);
-    const gatewayFeeCents = Math.round(amountCents * 0.0699) + 200; // 6.99% + R$2,00 (BravoPay PIX)
+    const gatewayFeeCents = Math.round(amountCents * 0.015);
     const netCents        = amountCents - gatewayFeeCents;
 
     const payload = {
       orderId:       transactionId,
-      platform:      "BravoPay",
+      platform:      "PlayPayments",
       paymentMethod: "pix",
       status:        "paid",
       createdAt:     txData.created_at || new Date().toISOString().replace("T", " ").slice(0, 19),
@@ -108,11 +108,11 @@ exports.handler = async (event) => {
   let statusResp;
   let text = "";
   try {
-    // BravoPay: GET /transactions/{id}
-    statusResp = await fetch(`${BRAVO_BASE}/transactions/${encodeURIComponent(transactionId)}`, {
+    // PlayPayments: GET /pix/status/{id}
+    statusResp = await fetch(`${PLAY_BASE}/pix/status/${encodeURIComponent(transactionId)}`, {
       method:  "GET",
       headers: {
-        "Authorization": `Bearer ${BRAVO_API_KEY}`,
+        "Authorization": `Bearer ${PLAY_API_KEY}`,
         "Content-Type":  "application/json",
       },
       signal: controller.signal,
@@ -129,15 +129,15 @@ exports.handler = async (event) => {
   try { parsed = JSON.parse(text); } catch { parsed = {}; }
 
   if (!statusResp.ok) {
-    const errMsg = parsed?.error?.message || text || "Erro ao consultar pagamento";
+    const errMsg = parsed?.message || text || "Erro ao consultar pagamento";
     return jsonResponse(statusResp.status, { success: false, error: errMsg });
   }
 
-  // BravoPay status: PENDING | PAID | EXPIRED | REFUNDED | CHARGEBACK
-  const rawStatus = (parsed.status || "PENDING").toUpperCase();
-  const paid      = rawStatus === "PAID";
-  const status    = paid ? "paid" : rawStatus.toLowerCase();
-  const paidAt    = parsed.paid_at || null;
+  // PlayPayments status: pending | paid | expired | cancelled
+  const rawStatus = (parsed.status || "pending").toLowerCase();
+  const paid      = rawStatus === "paid";
+  const status    = paid ? "paid" : rawStatus;
+  const paidAt    = parsed.paid_at || parsed.updated_at || null;
 
   try {
     const supabase = getSupabase();
