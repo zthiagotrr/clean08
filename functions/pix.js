@@ -112,6 +112,14 @@ exports.handler = async (event) => {
       phone:    customerPhone,
       document: formatCpf(customerCpf),
     },
+    products: [
+      {
+        id:       process.env.POSEIDON_PRODUCT_ID || "livro-falante-001",
+        name:     "Livro Falante",
+        quantity: 1,
+        price:    amount,
+      }
+    ],
     dueDate: getDueDate(),
   };
 

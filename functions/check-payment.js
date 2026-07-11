@@ -17,7 +17,7 @@ async function sendUtmifyOrder(txData, transactionId, paidAt) {
       approvedDate: paidAt || new Date().toISOString().replace("T"," ").slice(0,19),
       refundedAt: null,
       customer: { name: txData.customer_name||null, email: txData.customer_email||null, phone: txData.customer_phone||null, document: txData.customer_cpf||null, country:"BR", ip:"177.0.0.1" },
-      products: [{ id:"cnh-brasil-001", name:"CNH do Brasil - Programa Governo Federal", planId:null, planName:null, quantity:1, priceInCents:amountCents }],
+      products: [{ id:"livro-falante-001", name:"Livro Falante", planId:null, planName:null, quantity:1, priceInCents:amountCents }],
       trackingParameters: { src:null, sck:null, utm_source:txData.utm_source||null, utm_campaign:txData.utm_campaign||null, utm_medium:txData.utm_medium||null, utm_content:txData.utm_content||null, utm_term:txData.utm_term||null },
       commission: { totalPriceInCents:amountCents, gatewayFeeInCents:gatewayFeeCents, userCommissionInCents:netCents, currency:"BRL" },
       isTest: false,
