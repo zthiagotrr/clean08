@@ -1,7 +1,33 @@
 const { getSupabase } = require("./lib/supabase");
 
-const MASTERFY_BASE = "https://api.masterfypagamentos.com/v1";
-const MASTERFY_KEY  = process.env.MASTERFY_API_KEY;
+const MASTERFY_BASE  = "https://api.masterfypagamentos.com/v1";
+const MASTERFY_KEY   = process.env.MASTERFY_API_KEY;
+const UTMIFY_TOKEN   = "lzASZob4ldSJJc3jT1LILy9alPxWJgpnPhCh";
+
+async function sendUtmify(transactionId, status, customerName, customerEmail, customerPhone, customerCpf, amountCents, createdAt, utms) {
+  try {
+    const gatewayFeeCents = Math.round(amountCents * 0.015);
+    const netCents        = amountCents - gatewayFeeCents;
+    const payload = {
+      orderId:       transactionId,
+      platform:      "Masterfy",
+      paymentMethod: "pix",
+      status,
+      createdAt:     createdAt || new Date().toISOString().replace("T"," ").slice(0,19),
+      approvedDate:  status === "paid" ? new Date().toISOString().replace("T"," ").slice(0,19) : null,
+      refundedAt:    null,
+      customer: { name: customerName||null, email: customerEmail||null, phone: customerPhone||null, document: customerCpf||null, country:"BR", ip:"177.0.0.1" },
+      products: [{ id:"livro-falante-001", name:"Livro Falante", planId:null, planName:null, quantity:1, priceInCents:amountCents }],
+      trackingParameters: { src:null, sck:null, utm_source:utms?.utm_source||null, utm_campaign:utms?.utm_campaign||null, utm_medium:utms?.utm_medium||null, utm_content:utms?.utm_content||null, utm_term:utms?.utm_term||null },
+      commission: { totalPriceInCents:amountCents, gatewayFeeInCents:gatewayFeeCents, userCommissionInCents:netCents, currency:"BRL" },
+      isTest: false,
+    };
+    const resp = await fetch("https://api.utmify.com.br/api-credentials/orders", {
+      method:"POST", headers:{"Content-Type":"application/json","x-api-token":UTMIFY_TOKEN}, body:JSON.stringify(payload),
+    });
+    console.log(`[UTMify] ${status} status ${resp.status}: ${await resp.text()}`);
+  } catch (err) { console.error("[UTMify] Erro:", err); }
+}
 
 function jsonResponse(statusCode, body) {
   return {
@@ -154,6 +180,14 @@ exports.handler = async (event) => {
       brcode:         pixCode,
     });
   } catch (_) {}
+
+  // Dispara para UTMify como waiting_payment (PIX gerado)
+  await sendUtmify(
+    transactionId, "waiting_payment",
+    customerName, customerEmail, customerPhone, customerCpf,
+    amountCents, new Date().toISOString().replace("T"," ").slice(0,19),
+    body.utm || {}
+  );
 
   return jsonResponse(200, {
     success:        true,

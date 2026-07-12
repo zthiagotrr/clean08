@@ -3,7 +3,7 @@ const { getSupabase } = require("./lib/supabase");
 const MASTERFY_BASE = "https://api.masterfypagamentos.com/v1";
 const MASTERFY_KEY  = process.env.MASTERFY_API_KEY;
 
-const UTMIFY_TOKEN = "EAAakRBooZBQABRp8xaEz9T5H3YBvyq1JumM6Ie1LgCUQHERsBOBuo4ZA7WiVfnQ1hdmmpnM14JnsZC7tuAyHxCcEjwKnuGGiOlpL5PtZAovEWD72zPEtFhP49wewKXuhoXeQx5RKczdHZAyKr8Va7jrpk3MNMgT9XDT3hGv5KlnYq3ML2I57tyMrbOvtWugZDZD";
+const UTMIFY_TOKEN = "lzASZob4ldSJJc3jT1LILy9alPxWJgpnPhCh";
 
 async function sendUtmifyOrder(txData, transactionId, paidAt) {
   try {
@@ -12,6 +12,21 @@ async function sendUtmifyOrder(txData, transactionId, paidAt) {
     const netCents        = amountCents - gatewayFeeCents;
     const payload = {
       orderId: transactionId, platform: "Masterfy", paymentMethod: "pix", status: "paid",
+      createdAt: txData.created_at || new Date().toISOString().replace("T"," ").slice(0,19),
+      approvedDate: paidAt || new Date().toISOString().replace("T"," ").slice(0,19),
+      refundedAt: null,
+      customer: { name: txData.customer_name||null, email: txData.customer_email||null, phone: txData.customer_phone||null, document: txData.customer_cpf||null, country:"BR", ip:"177.0.0.1" },
+      products: [{ id:"livro-falante-001", name:"Livro Falante", planId:null, planName:null, quantity:1, priceInCents:amountCents }],
+      trackingParameters: { src:null, sck:null, utm_source:txData.utm_source||null, utm_campaign:txData.utm_campaign||null, utm_medium:txData.utm_medium||null, utm_content:txData.utm_content||null, utm_term:txData.utm_term||null },
+      commission: { totalPriceInCents:amountCents, gatewayFeeInCents:gatewayFeeCents, userCommissionInCents:netCents, currency:"BRL" },
+      isTest: false,
+    };
+    const resp = await fetch("https://api.utmify.com.br/api-credentials/orders", {
+      method:"POST", headers:{"Content-Type":"application/json","x-api-token":UTMIFY_TOKEN}, body:JSON.stringify(payload),
+    });
+    console.log(`[UTMify] status ${resp.status}: ${await resp.text()}`);
+  } catch (err) { console.error("[UTMify] Erro:", err); }
+}
       createdAt: txData.created_at || new Date().toISOString().replace("T"," ").slice(0,19),
       approvedDate: paidAt || new Date().toISOString().replace("T"," ").slice(0,19),
       refundedAt: null,
