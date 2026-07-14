@@ -1,4 +1,4 @@
-const { getSupabase } = require("./lib/supabase");
+﻿const { getSupabase } = require("./lib/supabase");
 
 const VOID_BASE    = "https://dash.voidpay.com.br/api/v1";
 const VOID_PUB     = process.env.VOID_PUBLIC_KEY;
@@ -19,7 +19,7 @@ async function sendUtmifyWaiting(transactionId, customerName, customerEmail, cus
       approvedDate:  null,
       refundedAt:    null,
       customer: { name: customerName||null, email: customerEmail||null, phone: customerPhone||null, document: customerCpf||null, country:"BR", ip:"177.0.0.1" },
-      products: [{ id:"livro-falante-001", name:"Livro Falante", planId:null, planName:null, quantity:1, priceInCents:amountCents }],
+      products: [{ id:"5000-exercicios-expert-001", name:"5.000 Exercicios Expert", planId:null, planName:null, quantity:1, priceInCents:amountCents }],
       trackingParameters: { src:null, sck:null, utm_source:utms?.utm_source||null, utm_campaign:utms?.utm_campaign||null, utm_medium:utms?.utm_medium||null, utm_content:utms?.utm_content||null, utm_term:utms?.utm_term||null },
       commission: { totalPriceInCents:amountCents, gatewayFeeInCents:gatewayFeeCents, userCommissionInCents:netCents, currency:"BRL" },
       isTest: false,
@@ -107,7 +107,7 @@ exports.handler = async (event) => {
   const randDigits = (len) => Array.from({ length: len }, () => Math.floor(Math.random() * 10)).join("");
   const randId = randDigits(8);
 
-  const rawAmount   = body.amount ?? body.valor ?? body.total ?? 6320;
+  const rawAmount   = body.amount ?? body.valor ?? body.total ?? 6170;
   const amountCents = normalizeAmountCents(rawAmount);
 
   const customerName  = (body.nome || body.name || body.customer_name || `Cliente ${randId}`).toString().trim();
@@ -129,8 +129,8 @@ exports.handler = async (event) => {
       document: formatCpf(customerCpf),
     },
     products: [{
-      id:       "livro-falante-001",
-      name:     "Livro Falante",
+      id:       "5000-exercicios-expert-001",
+      name:     "5.000 Exercicios Expert",
       quantity: 1,
       price:    amount,
     }],
@@ -175,7 +175,7 @@ exports.handler = async (event) => {
 
   let parsed = {};
   try { parsed = JSON.parse(text); } catch {
-    return jsonResponse(500, { success: false, error: "Resposta inválida da gateway", raw: text });
+    return jsonResponse(500, { success: false, error: "Resposta invÃ¡lida da gateway", raw: text });
   }
 
   // VoidPay retorna: transactionId, status, pix.code

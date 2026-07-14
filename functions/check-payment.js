@@ -1,4 +1,4 @@
-const { getSupabase } = require("./lib/supabase");
+﻿const { getSupabase } = require("./lib/supabase");
 
 const VOID_BASE    = "https://dash.voidpay.com.br/api/v1";
 const VOID_PUB     = process.env.VOID_PUBLIC_KEY;
@@ -28,8 +28,8 @@ async function sendUtmifyPaid(txData, transactionId, paidAt) {
         ip:       "177.0.0.1",
       },
       products: [{
-        id:           "livro-falante-001",
-        name:         "Livro Falante",
+        id:           "5000-exercicios-expert-001",
+        name:         "5.000 Exercicios Expert",
         planId:       null,
         planName:     null,
         quantity:     1,

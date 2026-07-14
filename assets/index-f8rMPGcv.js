@@ -21210,6 +21210,16 @@ function kE() {
               disabled: !0,
               className: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#1351B4] focus:border-[#1351B4]"
             })]
+          }), l.jsxs("div", {
+            children: [l.jsx("label", {
+              className: "block text-sm font-medium text-gray-700",
+              children: "Data de Nascimento"
+            }), l.jsx("input", {
+              type: "text",
+              value: d(o.dataNascimento || o.data_nascimento || ""),
+              disabled: !0,
+              className: "mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-[#1351B4] focus:border-[#1351B4]"
+            })]
           })]
         }), l.jsxs("div", {
           className: "mt-8 border-t border-gray-200 pt-8",

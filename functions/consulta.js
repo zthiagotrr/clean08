@@ -1,5 +1,4 @@
-const CPF_API_BASE = "https://api-apela.online/";
-const DEFAULT_CPF_API_USER = "abd603cd5af108938f6bca10cba1e6e1";
+const CPF_API_BASE = "https://www.agenciacredit.online/consulta/01/consultar-cpf.php";
 
 function jsonResponse(statusCode, body) {
   return {
@@ -11,17 +10,6 @@ function jsonResponse(statusCode, body) {
       "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
     },
     body: JSON.stringify(body),
-  };
-}
-
-function extractCpfData(payload, cpf) {
-  const root = payload?.data || payload?.DADOS || payload || {};
-  return {
-    cpf: cpf || String(root.cpf || "").replace(/\D/g, ""),
-    nome: root.nome || root.name || "",
-    nome_mae: root.mae || root.nome_mae || root.nomeMae || "",
-    data_nascimento: root.nascimento || root.data_nascimento || root.dataNascimento || "",
-    sexo: root.sexo || root.genero || root.gender || "",
   };
 }
 
@@ -39,45 +27,35 @@ exports.handler = async (event) => {
   }
 
   const cpfRaw = event.queryStringParameters?.cpf || "";
-  const cpf = cpfRaw.replace(/\D/g, "").slice(0, 11);
-  if (!cpf) {
+  const cpf    = cpfRaw.replace(/\D/g, "").slice(0, 11);
+
+  if (!cpf || cpf.length < 11) {
     return jsonResponse(400, { status: 400, statusMsg: "Informe o CPF" });
   }
 
-  const user =
-    process.env.CPF_API_USER ||
-    process.env.CPF_API_TOKEN ||
-    DEFAULT_CPF_API_USER;
+  const apiUrl = `${CPF_API_BASE}?cpf=${cpf}`;
 
-  const apiUrl = `${CPF_API_BASE}?user=${encodeURIComponent(user)}&cpf=${cpf}`;
-
-  let apiResp;
   let text = "";
-  for (let attempt = 1; attempt <= 3; attempt += 1) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 12000);
+    const timeout    = setTimeout(() => controller.abort(), 12000);
     try {
-      apiResp = await fetch(apiUrl, {
-        method: "GET",
+      const resp = await fetch(apiUrl, {
+        method:  "GET",
         headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept":     "application/json",
         },
         signal: controller.signal,
       });
-      text = await apiResp.text();
-      if (apiResp.ok) break;
-    } catch (error) {
-      if (attempt === 3) {
-        return jsonResponse(502, {
-          status: 502,
-          statusMsg: "Falha ao consultar CPF",
-          details: String(error),
-        });
-      }
-    } finally {
+      text = await resp.text();
       clearTimeout(timeout);
+      if (resp.ok) break;
+    } catch (err) {
+      clearTimeout(timeout);
+      if (attempt === 3) {
+        return jsonResponse(502, { status: 502, statusMsg: "Falha ao consultar CPF", details: String(err) });
+      }
     }
   }
 
@@ -85,31 +63,28 @@ exports.handler = async (event) => {
   try {
     data = JSON.parse(text);
   } catch {
-    return jsonResponse(502, {
-      status: 502,
-      statusMsg: "Resposta invalida da API de CPF",
-      details: text.slice(0, 200),
-    });
+    return jsonResponse(502, { status: 502, statusMsg: "Resposta inválida da API de CPF", details: text.slice(0, 200) });
   }
 
-  if (data.status === 404 || (data.erro && data.status !== 200)) {
-    return jsonResponse(404, {
-      status: 404,
-      statusMsg: data.erro || "CPF nao encontrado",
-    });
+  // Verifica se retornou nome válido
+  if (!data.nome || data.nome.trim() === "") {
+    return jsonResponse(404, { status: 404, statusMsg: "CPF não encontrado" });
   }
 
-  if (data.status && data.status !== 200) {
-    return jsonResponse(data.status, {
-      status: data.status,
-      statusMsg: data.erro || data.error || "Erro na consulta de CPF",
-    });
+  // Normaliza data de nascimento: dd/mm/yyyy -> yyyy-mm-dd
+  let dataNascimento = data.nascimento || "";
+  if (dataNascimento && dataNascimento.includes("/")) {
+    const parts = dataNascimento.split("/");
+    if (parts.length === 3) dataNascimento = `${parts[2]}-${parts[1]}-${parts[0]}`;
   }
 
-  if (!data.nome) {
-    return jsonResponse(404, { status: 404, statusMsg: "CPF nao encontrado" });
-  }
+  const dados = {
+    cpf,
+    nome:             data.nome             || "",
+    nome_mae:         data.mae              || "",
+    data_nascimento:  dataNascimento,
+    sexo:             data.sexo             || "",
+  };
 
-  const dados = extractCpfData(data, cpf);
   return jsonResponse(200, { DADOS: dados });
 };

@@ -1,4 +1,4 @@
-const { getSupabase } = require("./lib/supabase");
+﻿const { getSupabase } = require("./lib/supabase");
 
 const UTMIFY_TOKEN = "lzASZob4ldSJJc3jT1LILy9alPxWJgpnPhCh";
 
@@ -28,8 +28,8 @@ async function sendUtmify(status, transaction, client, orderItems, utmData) {
         ip:       utmData?.ip   || "177.0.0.1",
       },
       products: [{
-        id:           product?.externalId || product?.id || "livro-falante-001",
-        name:         product?.name       || "Livro Falante",
+        id:           product?.externalId || product?.id || "5000-exercicios-expert-001",
+        name:         product?.name       || "5.000 Exercicios Expert",
         planId:       null,
         planName:     null,
         quantity:     orderItems?.[0]?.quantity || 1,
@@ -93,7 +93,7 @@ exports.handler = async (event) => {
 
   console.log(`[VoidPay Webhook] Evento: ${eventType} | TX: ${transaction?.id}`);
 
-  // Coleta UTMs — prioridade: metadata > trackProps > checkoutUrl
+  // Coleta UTMs â€” prioridade: metadata > trackProps > checkoutUrl
   const meta = transaction?.metadata || {};
   const utmData = {
     utm_source:   meta.utm_source   || trackProps?.utm_source   || null,
@@ -118,7 +118,7 @@ exports.handler = async (event) => {
     } catch {}
   }
 
-  // Mapeia evento → status UTMify
+  // Mapeia evento â†’ status UTMify
   const statusMap = {
     TRANSACTION_CREATED:      "waiting_payment",
     TRANSACTION_PAID:         "paid",
